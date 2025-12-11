@@ -94,9 +94,6 @@ This approach ensures quizzes are grounded in factual content whilst maintaining
 
 - **Python 3.8+** - Core runtime
 - **[Ollama](https://ollama.ai/)** - Local LLM inference engine
-- **Required Ollama models**:
-  - `gemma3:4b` - Main LLM for generation and evaluation
-  - `embeddinggemma` - Text embeddings for semantic search
 
 ### Setup Steps
 
