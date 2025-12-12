@@ -100,7 +100,7 @@ This approach ensures quizzes are grounded in factual content whilst maintaining
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/yourusername/ConQuerX.git
+   git clone https://github.com/timothyckl/ConQuerX.git
    cd ConQuerX
    ```
 
