@@ -34,6 +34,7 @@ WIKI_FILE = "wiki.json"
 EVALUATION_FILE = "wiki_evaluation.json"
 LOG_FILE = "pipeline.log"
 CACHE_DIR = ".cache/wikipedia"
+INDEX_DIR = ".indices"
 
 # ============================================================================
 # LLM Settings
@@ -66,5 +67,9 @@ WIKIPEDIA_DELAY = 0.1  # seconds between API calls
 # Initialized Objects
 # ============================================================================
 
-LLM = Ollama(model=OLLAMA_MODEL)
+LLM = Ollama(
+    model=OLLAMA_MODEL,
+    request_timeout=120.0,
+    json_mode=True,
+)
 EMBED_MODEL = OllamaEmbedding(model_name=EMBEDDING_MODEL)

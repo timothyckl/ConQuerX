@@ -7,19 +7,23 @@ with the correct answer always in position A.
 """
 
 import json
+import os
 import time
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
-from config import EMBED_MODEL, LLM, WIKIPEDIA_USER_AGENT, RETRIEVAL_TOP_K, CHUNK_SIZE, CHUNK_OVERLAP, LOG_FILE, CACHE_DIR, WIKIPEDIA_DELAY
-from llama_index.core import VectorStoreIndex, Settings
+from llama_index.core import Settings, StorageContext, VectorStoreIndex, load_index_from_storage
 from llama_index.core.llms import ChatMessage
 from llama_index.core.schema import Document
-from prompts import QUESTION_GENERATION_PROMPT, SUMMARY_GENERATION_PROMPT
 from tqdm import tqdm
 from wikipediaapi import Wikipedia
+
+from config import (CACHE_DIR, CHUNK_OVERLAP, CHUNK_SIZE, EMBED_MODEL, INDEX_DIR, LLM,
+                    LOG_FILE, RETRIEVAL_TOP_K, WIKIPEDIA_DELAY,
+                    WIKIPEDIA_USER_AGENT)
+from prompts import QUESTION_GENERATION_PROMPT, SUMMARY_GENERATION_PROMPT
+from utils.cache import WikipediaCache
 from utils.logger import setup_logger
 from utils.validation import validate_quiz_format
-from utils.cache import WikipediaCache
 
 logger = setup_logger(__name__, log_file=LOG_FILE)
 
@@ -27,18 +31,18 @@ logger = setup_logger(__name__, log_file=LOG_FILE)
 def generate_quiz() -> None:
     """
     Generate educational quizzes based on Wikipedia content.
-    
+
     For each question and its associated concepts:
     1. Fetches Wikipedia pages for the concepts
     2. Creates a semantic index for information retrieval
     3. Retrieves relevant content chunks for the question
     4. Generates a summary from retrieved content
     5. Creates 3 quiz questions based on the summary
-    
+
     Output files:
     - quiz_concept_wiki.json: Questions, concepts, and generated quizzes
     - wiki.json: Wikipedia summaries and raw content
-    
+
     Raises:
         FileNotFoundError: If concepts.json doesn't exist
         IOError: If unable to write output files
@@ -64,20 +68,19 @@ def generate_quiz() -> None:
         logger.info(f"Generating quizzes for {level} level")
 
         for area, question_data in tqdm(areas.items(), desc=f"{level}"):
-            wiki[level][area] = {
-                "summary": [],
-                "wiki": []
-            }
+            wiki[level][area] = {"summary": [], "wiki": []}
             data[level][area]["quiz"] = []
 
-            for question, concepts in zip(question_data["questions"], question_data["concepts"]):
+            for question, concepts in zip(
+                question_data["questions"], question_data["concepts"]
+            ):
                 wiki_docs: List[Document] = []
 
                 # fetch Wikipedia pages for each concept (with caching)
                 for concept in concepts:
                     # try cache first
                     cached_content = wiki_cache.get(concept)
-                    
+
                     if cached_content:
                         # use cached content
                         doc = Document(text=cached_content)
@@ -88,23 +91,29 @@ def generate_quiz() -> None:
                         try:
                             logger.debug(f"Fetching Wikipedia page: {concept}")
                             time.sleep(WIKIPEDIA_DELAY)  # rate limiting
-                            
+
                             page_py = wiki_obj.page(concept)
                             page_content = page_py.text
                             page_id = str(page_py.pageid)
-                            
+
                             # cache for future use
                             wiki_cache.set(concept, page_content, page_id)
-                            
+
                             doc = Document(id_=page_id, text=page_content)
                             wiki_docs.append(doc)
                         except Exception as e:
-                            logger.warning(f"Could not load Wikipedia page for '{concept}': {e}")
+                            logger.warning(
+                                f"Could not load Wikipedia page for '{concept}': {e}"
+                            )
                             continue
 
-                # create vector index from Wikipedia documents for semantic search
-                # this allows retrieving most relevant content chunks for the question
-                index = VectorStoreIndex.from_documents(wiki_docs)
+                if os.path.exists(INDEX_DIR):
+                    storage = StorageContext.from_defaults(persist_dir=INDEX_DIR)
+                    index = load_index_from_storage(storage_context=storage) 
+                else: 
+                    index = VectorStoreIndex.from_documents(wiki_docs)
+                    index.storage_context.persist(persist_dir=INDEX_DIR)
+
                 retriever = index.as_retriever(similarity_top_k=RETRIEVAL_TOP_K)
                 nodes = retriever.retrieve(question)
 
@@ -162,5 +171,5 @@ def generate_quiz() -> None:
     logger.info("Writing Wikipedia content to wiki.json")
     with open("wiki.json", "w") as f:
         f.write(json.dumps(wiki, indent=4))
-    
+
     logger.info("Quiz generation completed successfully")

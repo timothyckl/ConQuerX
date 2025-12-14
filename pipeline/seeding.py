@@ -18,6 +18,17 @@ from utils.validation import sanitise_area_name, validate_questions
 
 logger = setup_logger(__name__, log_file=LOG_FILE)
 
+from llama_index.core.bridge.pydantic import BaseModel
+
+
+class QuestionModel(BaseModel):
+    """A list of questions"""
+    area: str
+    level: str
+    questions: list[str]
+
+# attach pydantic class to ensure structured outputs
+seed_llm = LLM.as_structured_llm(QuestionModel)
 
 def seed_questions() -> None:
     """
@@ -45,14 +56,11 @@ def seed_questions() -> None:
             area = sanitise_area_name(area)
             prompt = SEED_QUESTION_GENERATION_PROMPT.format(area, level)
 
-            response = LLM.chat(
-                messages=[
-                    ChatMessage(role="user", content=prompt),
-                ]
-            )
+            # generate seed questions
+            json_str = seed_llm.chat(messages=[ChatMessage(role="user", content=prompt)])
+            json_obj = json.loads(str(json_str.message.content))
 
-            questions = response.message.content.split("\n")
-            questions = [q.strip() for q in questions if q.strip()]
+            questions = [q.strip() for q in json_obj['questions'] if q.strip()]
             questions = validate_questions(questions, min_count=3)
             out[level][area] = questions
 
